@@ -17,6 +17,11 @@ dist-ssr
 .env.*
 !.env.example
 
+# Mobile icon sets (desktop-only project) — regenerate with `tauri icon`
+src-tauri/icons/android/
+src-tauri/icons/ios/
+src-tauri/gen/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
