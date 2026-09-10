@@ -1,0 +1,295 @@
+@import "tailwindcss";
+
+/* Dark mode driven by a `.dark` class on <html> */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ------------------------------------------------------------------ *
+ *  DM Tech Payroll — Design tokens
+ *  Editorial SaaS system: near-white canvas, hairline borders (not
+ *  shadows), dense monochrome type, one navy accent (#183B5B), a
+ *  near-black committed CTA. Border-first = also cheap to render.
+ * ------------------------------------------------------------------ */
+:root {
+  /* Surfaces — light */
+  --bg: #fcfcfc;
+  --bg-dot: rgba(10, 10, 10, 0.07);
+  --surface: #ffffff;
+  --surface-2: #f5f5f5;
+  --surface-3: #ededed;
+  --overlay: rgba(10, 10, 10, 0.32);
+
+  --border: #e5e5e5;
+  --border-strong: #d4d4d4;
+  --border-input: #c8c8c8;
+
+  --text: #171717;
+  --text-muted: #737373;
+  --text-subtle: #a3a3a3;
+
+  /* Navy accent — links, active states, key figures, icon accents */
+  --brand: #183b5b;
+  --brand-hover: #14324b;
+  --brand-active: #0f2438;
+  --brand-fg: #ffffff;
+  --brand-ring: rgba(24, 59, 91, 0.28);
+  --brand-tint: #eef2f7;
+
+  /* Committed action — one per surface */
+  --primary-fill: #0a0a0a;
+  --primary-fill-hover: #262626;
+  --primary-fill-active: #000000;
+  --primary-fill-fg: #ffffff;
+
+  /* Supporting feature accents (text + soft tint), used sparingly */
+  --pos: #157f3c;
+  --pos-soft: #e7f6ec;
+  --neg: #c02535;
+  --neg-soft: #fbeaec;
+  --warn: #c2560c;
+  --warn-soft: #fdeee2;
+  --info: #1d4ed8;
+  --info-soft: #e7edfd;
+  --violet: #6d28d9;
+
+  color-scheme: light;
+}
+
+.dark {
+  --bg: #0a0a0a;
+  --bg-dot: rgba(255, 255, 255, 0.05);
+  --surface: #141414;
+  --surface-2: #1c1c1c;
+  --surface-3: #242424;
+  --overlay: rgba(0, 0, 0, 0.6);
+
+  --border: #262626;
+  --border-strong: #333333;
+  --border-input: #404040;
+
+  --text: #ededed;
+  --text-muted: #8f8f8f;
+  --text-subtle: #6b6b6b;
+
+  --brand: #6ea8dc;
+  --brand-hover: #82b6e4;
+  --brand-active: #97c4ec;
+  --brand-fg: #0a1a2a;
+  --brand-ring: rgba(110, 168, 220, 0.4);
+  --brand-tint: #17252f;
+
+  --primary-fill: #fafafa;
+  --primary-fill-hover: #e5e5e5;
+  --primary-fill-active: #ffffff;
+  --primary-fill-fg: #0a0a0a;
+
+  --pos: #46c46a;
+  --pos-soft: #14261a;
+  --neg: #f4707d;
+  --neg-soft: #2a1618;
+  --warn: #f0a548;
+  --warn-soft: #2a1e12;
+  --info: #7aa5f5;
+  --info-soft: #161d2e;
+  --violet: #a98bec;
+
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-overlay: var(--overlay);
+
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-border-input: var(--border-input);
+
+  --color-text: var(--text);
+  --color-muted: var(--text-muted);
+  --color-subtle: var(--text-subtle);
+
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-active: var(--brand-active);
+  --color-brand-fg: var(--brand-fg);
+  --color-brand-tint: var(--brand-tint);
+
+  --color-ink: var(--primary-fill);
+  --color-ink-hover: var(--primary-fill-hover);
+  --color-ink-active: var(--primary-fill-active);
+  --color-ink-fg: var(--primary-fill-fg);
+
+  --color-pos: var(--pos);
+  --color-pos-soft: var(--pos-soft);
+  --color-neg: var(--neg);
+  --color-neg-soft: var(--neg-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-violet: var(--violet);
+
+  /* Static navy ramp */
+  --color-navy-50: #eef2f7;
+  --color-navy-100: #dbe4ee;
+  --color-navy-200: #b8c9dd;
+  --color-navy-300: #8aa6c4;
+  --color-navy-400: #5a80a7;
+  --color-navy-500: #356090;
+  --color-navy-600: #234d74;
+  --color-navy-700: #183b5b;
+  --color-navy-800: #132f49;
+  --color-navy-900: #0f2438;
+  --color-navy-950: #091725;
+
+  --font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* Radius vocabulary (Tailwind defaults kept):
+     rounded-md 6px inputs · rounded-lg 8px buttons · rounded-xl 12px cards ·
+     rounded-2xl 16px large surfaces · rounded-full pills */
+
+  /* Elevation reserved for overlays only — cards use borders */
+  --shadow-card: 0 1px 2px rgba(10, 10, 10, 0.04);
+  --shadow-pop: 0 10px 15px -3px rgba(10, 10, 10, 0.1), 0 4px 6px -4px rgba(10, 10, 10, 0.1);
+  --shadow-ring: 0 0 0 4px rgba(10, 10, 10, 0.06);
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ------------------------------------------------------------------ */
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    background-color: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-feature-settings: "cv05" 1, "cv11" 1, "ss03" 1;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overflow: hidden; /* the app shell owns scrolling */
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    letter-spacing: -0.019em;
+    font-weight: 600;
+  }
+
+  .tnum {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1, "cv05" 1;
+  }
+
+  /* Editorial display treatment — the Satoshi substitute */
+  .font-display {
+    font-weight: 600;
+    letter-spacing: -0.022em;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+
+  ::selection {
+    background: var(--brand);
+    color: var(--brand-fg);
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: padding-box;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: var(--text-subtle);
+    background-clip: padding-box;
+  }
+
+  /* Signature dotted-grid texture — one static gradient, cheap */
+  .bg-app-grid {
+    background-image: radial-gradient(var(--bg-dot) 1px, transparent 1.5px);
+    background-size: 22px 22px;
+    background-position: -1px -1px;
+  }
+
+  .drag-region {
+    -webkit-app-region: drag;
+    app-region: drag;
+  }
+  .no-drag {
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ *  Print — slip gaji export (window.print → Save as PDF)
+ * ------------------------------------------------------------------ */
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm;
+  }
+  body {
+    overflow: visible !important;
+    background: #ffffff !important;
+  }
+  body * {
+    visibility: hidden;
+  }
+  body[data-print="one"] .slip-one,
+  body[data-print="one"] .slip-one *,
+  body[data-print="all"] .slip-all,
+  body[data-print="all"] .slip-all * {
+    visibility: visible;
+  }
+  body[data-print="one"] .slip-one,
+  body[data-print="all"] .slip-all {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+  }
+  .slip-page {
+    break-inside: avoid;
+    page-break-after: always;
+  }
+  .slip-page:last-child {
+    page-break-after: auto;
+  }
+}
