@@ -1,14 +1,13 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ShieldCheck,
   DatabaseBackup,
   FolderOpen,
   KeyRound,
   Fingerprint,
-  HardDrive,
+  Cpu,
   TriangleAlert,
   RotateCcw,
-  Cpu,
 } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -23,7 +22,7 @@ import { LogoMark } from "@/components/brand/Logo";
 import { brand, appTitle } from "@/config/brand";
 import { toast } from "@/components/ui/toast";
 import { usePayroll } from "@/data/store";
-import { getDeviceFingerprint } from "@/lib/device";
+import { fetchLicenseStatus, inTauri, transferLicense, type LicenseStatus } from "@/lib/useLicense";
 import { tanggalPanjang, waktuRelatif } from "@/lib/format";
 
 const TRIGGER_LABEL: Record<string, string> = {
@@ -33,12 +32,21 @@ const TRIGGER_LABEL: Record<string, string> = {
 };
 
 export default function BackupLisensi() {
-  const { backups, lastBackupAt, deviceBoundAt, createBackup, rebindDevice, resetAll } = usePayroll();
-  const fp = getDeviceFingerprint();
+  const { backups, lastBackupAt, createBackup, resetAll } = usePayroll();
+  const [status, setStatus] = useState<LicenseStatus | null>(null);
+
+  useEffect(() => {
+    fetchLicenseStatus()
+      .then(setStatus)
+      .catch(() => setStatus(null));
+  }, []);
+  const fp = status?.fingerprint;
 
   const [transferOpen, setTransferOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [pw, setPw] = useState("");
+  const [pwError, setPwError] = useState("");
+  const [transferring, setTransferring] = useState(false);
 
   return (
     <>
@@ -72,27 +80,28 @@ export default function BackupLisensi() {
               <p className="mb-1 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-subtle">
                 Device fingerprint (SHA-256)
               </p>
-              <p className="break-all font-mono text-[11.5px] leading-relaxed text-brand">{fp.short}</p>
+              <p className="break-all font-mono text-[11.5px] leading-relaxed text-brand">
+                {fp?.short ?? "Memuat…"}
+              </p>
             </div>
             <dl className="mt-2 divide-y divide-border">
-              <KeyValue label={<span className="flex items-center gap-1.5"><HardDrive className="size-3.5" /> Volume Serial</span>} mono>
-                {fp.volumeSerial}
-              </KeyValue>
               <KeyValue label={<span className="flex items-center gap-1.5"><Cpu className="size-3.5" /> Machine GUID</span>} mono>
-                {fp.machineGuid}
+                {fp?.machineGuid ?? "—"}
               </KeyValue>
               <KeyValue label="Hostname" mono>
-                {fp.hostname}
+                {fp?.hostname ?? "—"}
               </KeyValue>
-              <KeyValue label="Kunci diikat sejak">{tanggalPanjang(deviceBoundAt)}</KeyValue>
-              <KeyValue label="Key derivation" mono>
-                Argon2id · SQLCipher
+              <KeyValue label="Kunci diikat sejak">
+                {status?.boundAt ? tanggalPanjang(status.boundAt) : "—"}
+              </KeyValue>
+              <KeyValue label="Sumber" mono>
+                {inTauri() ? "Rust · SHA-256 device binding" : "Web preview (mock)"}
               </KeyValue>
             </dl>
             <p className="mt-3 rounded-lg bg-info-soft px-3 py-2 text-[12px] leading-relaxed text-info">
-              Jika <span className="font-mono text-[11px]">payroll.db.enc</span> disalin ke perangkat lain,
-              fingerprint tidak cocok → SQLCipher gagal decrypt → file dianggap rusak di sana. Datanya sendiri
-              tidak dihapus.
+              Kalau app + datanya disalin ke perangkat lain, fingerprint di sana tidak cocok dengan
+              yang tersimpan di sini → aplikasi menolak jalan sampai di-aktivasi ulang lewat Transfer
+              Lisensi. Data tidak dihapus.
             </p>
           </CardBody>
         </Card>
@@ -182,9 +191,9 @@ export default function BackupLisensi() {
             <dl className="divide-y divide-border">
               <KeyValue label="Produk">{`${appTitle} — ${brand.vendor.product}`}</KeyValue>
               <KeyValue label="Versi" mono>
-                {brand.vendor.version} · frontend preview
+                {brand.vendor.version} {inTauri() ? "· desktop" : "· web preview"}
               </KeyValue>
-              <KeyValue label="Target">Tauri v2 · Rust · SQLCipher</KeyValue>
+              <KeyValue label="Target">Tauri v2 · Rust · device-lock aktif · SQLCipher menyusul</KeyValue>
               <KeyValue label="Lisensi">{`Internal — ${brand.company.name}`}</KeyValue>
               <KeyValue label="Pengembang">{brand.vendor.name}</KeyValue>
             </dl>
@@ -219,15 +228,22 @@ export default function BackupLisensi() {
               Batal
             </Button>
             <Button
-              onClick={() => {
-                if (pw.trim().length < 4) {
-                  toast.error("Password kurang", "Minimal 4 karakter (demo).");
-                  return;
+              loading={transferring}
+              onClick={async () => {
+                setPwError("");
+                setTransferring(true);
+                try {
+                  const next = await transferLicense(pw);
+                  setStatus(next);
+                  createBackup("transfer-lisensi");
+                  toast.success("Lisensi ditransfer", "Terikat ulang ke fingerprint perangkat ini.");
+                  setTransferOpen(false);
+                  setPw("");
+                } catch (e) {
+                  setPwError(e instanceof Error ? e.message : "Password transfer salah.");
+                } finally {
+                  setTransferring(false);
                 }
-                rebindDevice();
-                createBackup("transfer-lisensi");
-                toast.success("Lisensi ditransfer", "Database di-enkripsi ulang ke fingerprint perangkat ini.");
-                setTransferOpen(false);
               }}
             >
               Transfer
@@ -242,10 +258,12 @@ export default function BackupLisensi() {
           onChange={(e) => setPw(e.target.value)}
           placeholder="••••••••"
           addonRight={<KeyRound />}
+          error={pwError}
         />
         <p className="mt-3 text-[12px] leading-relaxed text-muted">
-          Di build asli, langkah ini hanya berhasil bila password cocok dengan hash yang tersimpan di{" "}
-          <span className="font-mono text-[11px]">app_meta</span>, lalu seluruh baris di-recrypt.
+          {inTauri()
+            ? "Password diverifikasi oleh Rust (src-tauri/src/lib.rs) sebelum marker lisensi ditulis ulang."
+            : "Di web preview ini cuma simulasi lokal — verifikasi asli berjalan saat dibuka sebagai aplikasi desktop."}
         </p>
       </Modal>
 

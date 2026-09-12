@@ -68,20 +68,25 @@ export function labelPeriode(bulan: number, tahun: number): string {
   return `${BULAN[(bulan - 1 + 12) % 12]} ${tahun}`;
 }
 
+/** Accepts an ISO date string OR an epoch-milliseconds string (e.g. from Rust's SystemTime). */
+function toDate(when: string): Date {
+  return /^\d+$/.test(when) ? new Date(Number(when)) : new Date(when);
+}
+
 export function tanggalPanjang(iso: string): string {
-  const d = new Date(iso);
+  const d = toDate(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
 }
 
 export function tanggalPendek(iso: string): string {
-  const d = new Date(iso);
+  const d = toDate(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" });
 }
 
 export function waktuRelatif(iso: string): string {
-  const d = new Date(iso).getTime();
+  const d = toDate(iso).getTime();
   if (Number.isNaN(d)) return "—";
   const diff = Date.now() - d;
   const min = Math.round(diff / 60000);
