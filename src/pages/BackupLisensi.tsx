@@ -5,7 +5,6 @@ import {
   FolderOpen,
   KeyRound,
   Fingerprint,
-  Cpu,
   TriangleAlert,
   RotateCcw,
 } from "lucide-react";
@@ -40,7 +39,7 @@ export default function BackupLisensi() {
       .then(setStatus)
       .catch(() => setStatus(null));
   }, []);
-  const fp = status?.fingerprint;
+  const licensed = status ? status.matches : true; // optimistic while loading
 
   const [transferOpen, setTransferOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
@@ -71,37 +70,31 @@ export default function BackupLisensi() {
         <Card>
           <CardHeader
             title="Kunci perangkat"
-            subtitle="Database terikat kriptografis ke komputer ini"
+            subtitle="Lisensi aplikasi untuk komputer ini"
             icon={<Fingerprint />}
-            actions={<Badge tone="pos" dot>Aktif</Badge>}
+            actions={
+              <Badge tone={licensed ? "pos" : "neg"} dot>
+                {licensed ? "Aktif" : "Perlu aktivasi"}
+              </Badge>
+            }
           />
           <CardBody>
-            <div className="rounded-lg border border-border bg-surface-2/50 p-3">
-              <p className="mb-1 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-subtle">
-                Device fingerprint (SHA-256)
-              </p>
-              <p className="break-all font-mono text-[11.5px] leading-relaxed text-brand">
-                {fp?.short ?? "Memuat…"}
-              </p>
+            <div className="flex items-center gap-3 rounded-lg border border-border bg-surface-2/50 p-4">
+              <span className="grid size-10 shrink-0 place-items-center rounded-full bg-pos-soft text-pos">
+                <ShieldCheck className="size-5" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[13.5px] font-semibold text-text">
+                  {licensed ? "Lisensi aktif untuk perangkat ini" : "Lisensi belum aktif di perangkat ini"}
+                </p>
+                <p className="text-[12px] text-subtle">
+                  {status?.boundAt ? `Terverifikasi sejak ${tanggalPanjang(status.boundAt)}` : "Memuat status…"}
+                </p>
+              </div>
             </div>
-            <dl className="mt-2 divide-y divide-border">
-              <KeyValue label={<span className="flex items-center gap-1.5"><Cpu className="size-3.5" /> Machine GUID</span>} mono>
-                {fp?.machineGuid ?? "—"}
-              </KeyValue>
-              <KeyValue label="Hostname" mono>
-                {fp?.hostname ?? "—"}
-              </KeyValue>
-              <KeyValue label="Kunci diikat sejak">
-                {status?.boundAt ? tanggalPanjang(status.boundAt) : "—"}
-              </KeyValue>
-              <KeyValue label="Sumber" mono>
-                {inTauri() ? "Rust · SHA-256 device binding" : "Web preview (mock)"}
-              </KeyValue>
-            </dl>
             <p className="mt-3 rounded-lg bg-info-soft px-3 py-2 text-[12px] leading-relaxed text-info">
-              Kalau app + datanya disalin ke perangkat lain, fingerprint di sana tidak cocok dengan
-              yang tersimpan di sini → aplikasi menolak jalan sampai di-aktivasi ulang lewat Transfer
-              Lisensi. Data tidak dihapus.
+              Aplikasi ini hanya berjalan di perangkat yang terdaftar untuk lisensi ini. Kalau kamu
+              mengganti atau meng-upgrade komputer, hubungi admin untuk proses Transfer Lisensi.
             </p>
           </CardBody>
         </Card>
@@ -168,8 +161,8 @@ export default function BackupLisensi() {
           <CardHeader title="Transfer Lisensi" subtitle="Khusus admin — pindahkan data ke komputer baru" icon={<KeyRound />} />
           <CardBody className="space-y-3">
             <p className="text-[12.5px] leading-relaxed text-muted">
-              Meng-enkripsi ulang database dengan fingerprint perangkat tujuan. Dipakai saat PC kantor
-              diganti/rusak sehingga data tidak hilang selamanya. Butuh password transfer terpisah.
+              Mengaktifkan ulang lisensi aplikasi untuk komputer ini. Dipakai saat PC diganti atau
+              di-upgrade supaya data tidak hilang. Butuh password khusus admin.
             </p>
             <Button
               variant="secondary"
@@ -193,7 +186,7 @@ export default function BackupLisensi() {
               <KeyValue label="Versi" mono>
                 {brand.vendor.version} {inTauri() ? "· desktop" : "· web preview"}
               </KeyValue>
-              <KeyValue label="Target">Tauri v2 · Rust · device-lock aktif · SQLCipher menyusul</KeyValue>
+              <KeyValue label="Target">Aplikasi desktop offline</KeyValue>
               <KeyValue label="Lisensi">{`Internal — ${brand.company.name}`}</KeyValue>
               <KeyValue label="Pengembang">{brand.vendor.name}</KeyValue>
             </dl>
@@ -236,7 +229,7 @@ export default function BackupLisensi() {
                   const next = await transferLicense(pw);
                   setStatus(next);
                   createBackup("transfer-lisensi");
-                  toast.success("Lisensi ditransfer", "Terikat ulang ke fingerprint perangkat ini.");
+                  toast.success("Lisensi diaktifkan", "Aplikasi sekarang aktif untuk perangkat ini.");
                   setTransferOpen(false);
                   setPw("");
                 } catch (e) {
@@ -261,9 +254,7 @@ export default function BackupLisensi() {
           error={pwError}
         />
         <p className="mt-3 text-[12px] leading-relaxed text-muted">
-          {inTauri()
-            ? "Password diverifikasi oleh Rust (src-tauri/src/lib.rs) sebelum marker lisensi ditulis ulang."
-            : "Di web preview ini cuma simulasi lokal — verifikasi asli berjalan saat dibuka sebagai aplikasi desktop."}
+          Hubungi admin kalau kamu tidak tahu password ini.
         </p>
       </Modal>
 

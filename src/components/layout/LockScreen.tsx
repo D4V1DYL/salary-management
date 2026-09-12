@@ -3,13 +3,12 @@ import { motion } from "framer-motion";
 import { Fingerprint, ShieldCheck, LockKeyhole, Loader2, ShieldAlert, KeyRound } from "lucide-react";
 import { LogoMark } from "@/components/brand/Logo";
 import { brand, appTitle } from "@/config/brand";
-import { activateLicense, fetchLicenseStatus, transferLicense, type FingerprintInfo } from "@/lib/useLicense";
+import { activateLicense, fetchLicenseStatus, transferLicense } from "@/lib/useLicense";
 
 type Phase = "loading" | "idle" | "checking" | "ok" | "mismatch";
 
 export function LockScreen({ onUnlock }: { onUnlock: () => void }) {
   const [phase, setPhase] = useState<Phase>("loading");
-  const [fp, setFp] = useState<FingerprintInfo | null>(null);
   const [pw, setPw] = useState("");
   const [pwError, setPwError] = useState("");
   const [transferring, setTransferring] = useState(false);
@@ -22,7 +21,6 @@ export function LockScreen({ onUnlock }: { onUnlock: () => void }) {
         let status = await fetchLicenseStatus();
         if (!status.bound) status = await activateLicense();
         if (cancelled) return;
-        setFp(status.fingerprint);
         setPhase(status.matches ? "idle" : "mismatch");
       } catch {
         if (cancelled) return;
@@ -50,11 +48,10 @@ export function LockScreen({ onUnlock }: { onUnlock: () => void }) {
     setPwError("");
     setTransferring(true);
     try {
-      const status = await transferLicense(pw);
-      setFp(status.fingerprint);
+      await transferLicense(pw);
       setPhase("idle");
     } catch (e) {
-      setPwError(e instanceof Error ? e.message : "Password transfer salah.");
+      setPwError(e instanceof Error ? e.message : "Password salah.");
     } finally {
       setTransferring(false);
     }
@@ -105,11 +102,10 @@ export function LockScreen({ onUnlock }: { onUnlock: () => void }) {
               <span className="grid size-16 place-items-center rounded-2xl border border-[#c02535]/40 bg-[#c02535]/10">
                 <ShieldAlert className="size-7 text-[#ff6b6f]" />
               </span>
-              <h1 className="mt-4 text-[17px] font-semibold">Perangkat tidak dikenali</h1>
+              <h1 className="mt-4 text-[17px] font-semibold">Lisensi tidak aktif di perangkat ini</h1>
               <p className="mt-1.5 text-[12.5px] leading-relaxed text-white/55">
-                Instalasi ini terikat ke komputer lain. Menyalin aplikasi + datanya ke sini tidak
-                membuatnya jalan di sini. Kalau ini memang penggantian perangkat resmi, admin bisa
-                mengaktifkan ulang dengan password transfer.
+                Aplikasi ini terdaftar untuk komputer lain. Kalau ini penggantian perangkat yang sah,
+                masukkan password admin untuk mengaktifkannya di sini.
               </p>
             </div>
 
@@ -120,7 +116,7 @@ export function LockScreen({ onUnlock }: { onUnlock: () => void }) {
                   type="password"
                   value={pw}
                   onChange={(e) => setPw(e.target.value)}
-                  placeholder="Password transfer lisensi"
+                  placeholder="Password admin"
                   className="h-11 w-full rounded-xl border border-white/10 bg-black/20 pl-10 pr-3 text-[13.5px] text-white placeholder:text-white/35 outline-none focus:border-white/30"
                 />
               </div>
@@ -165,22 +161,12 @@ export function LockScreen({ onUnlock }: { onUnlock: () => void }) {
                 {phase === "ok"
                   ? "Perangkat terverifikasi"
                   : phase === "loading"
-                    ? "Memeriksa lisensi perangkat…"
+                    ? "Memeriksa lisensi…"
                     : "Terkunci ke perangkat ini"}
               </h1>
               <p className="mt-1.5 text-[12.5px] leading-relaxed text-white/55">
-                Database <span className="font-mono text-white/70">payroll.db.enc</span> terikat kriptografis
-                ke Machine GUID &amp; hostname komputer ini. Menyalin file ke perangkat lain membuatnya
-                tidak bisa dibuka.
-              </p>
-            </div>
-
-            <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-              <p className="mb-1 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-white/40">
-                Device fingerprint (SHA-256)
-              </p>
-              <p className="break-all font-mono text-[11.5px] leading-relaxed text-[#8fd0f5]">
-                {fp?.short ?? "…"}
+                Aplikasi ini berlisensi khusus untuk komputer ini dan tidak bisa dijalankan di
+                perangkat lain.
               </p>
             </div>
 
@@ -202,7 +188,7 @@ export function LockScreen({ onUnlock }: { onUnlock: () => void }) {
         )}
 
         <p className="mt-4 text-center text-[10.5px] text-white/35">
-          Dilindungi SHA-256 device binding &middot; {brand.vendor.name}
+          Aplikasi berlisensi &middot; {brand.vendor.name}
         </p>
       </motion.div>
     </div>
