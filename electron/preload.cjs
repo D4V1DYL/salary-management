@@ -5,6 +5,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
   licenseStatus: () => ipcRenderer.invoke("license:status"),
   activateLicenseKey: (key) => ipcRenderer.invoke("license:activate-key", key),
 
+  dbLoad: () => ipcRenderer.invoke("db:load"),
+  dbSave: (json) => ipcRenderer.invoke("db:save", json),
+  dbClear: () => ipcRenderer.invoke("db:clear"),
+
   writeBackup: (json, trigger) => ipcRenderer.invoke("backup:write", json, trigger),
   listBackups: () => ipcRenderer.invoke("backup:list"),
   openBackupFolder: () => ipcRenderer.invoke("backup:open-folder"),

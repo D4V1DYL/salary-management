@@ -262,13 +262,19 @@
  *  Print — slip gaji export (window.print → Save as PDF)
  * ------------------------------------------------------------------ */
 @media print {
+  /* The slip's own 14mm padding is the page margin — so the page itself has
+     zero margin and the 210mm-wide slip fills an A4 page exactly (no scaling,
+     no reflow, no text wrapping). */
   @page {
     size: A4;
-    margin: 14mm;
+    margin: 0;
   }
+  html,
   body {
-    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
     background: #ffffff !important;
+    overflow: visible !important;
   }
   body * {
     visibility: hidden;
@@ -282,10 +288,15 @@
   body[data-print="one"] .slip-one,
   body[data-print="all"] .slip-all {
     position: absolute;
-    inset: 0;
+    left: 0;
+    top: 0;
+    width: 210mm;
     margin: 0;
   }
   .slip-page {
+    width: 210mm !important;
+    max-width: none !important;
+    box-shadow: none !important;
     break-inside: avoid;
     page-break-after: always;
   }

@@ -34,6 +34,10 @@ export interface ElectronBridge {
   licenseStatus: () => Promise<LicenseStatus>;
   activateLicenseKey: (key: string) => Promise<LicenseStatus>;
 
+  dbLoad: () => Promise<string | null>;
+  dbSave: (json: string) => Promise<boolean>;
+  dbClear: () => Promise<boolean>;
+
   writeBackup: (json: string, trigger: string) => Promise<BackupFileInfo>;
   listBackups: () => Promise<BackupFileInfo[]>;
   openBackupFolder: () => Promise<void>;

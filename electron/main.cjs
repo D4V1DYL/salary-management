@@ -8,6 +8,7 @@ const os = require("node:os");
 const crypto = require("node:crypto");
 const { execFileSync } = require("node:child_process");
 const { APP_SALT, TRIAL_DAYS, normalizeKey, deriveLicenseKey } = require("./license-config.cjs");
+const db = require("./db.cjs");
 
 /**
  * Licensing + device-lock.
@@ -165,6 +166,25 @@ ipcMain.handle("license:status", () => computeStatus());
 ipcMain.handle("license:activate-key", (_event, key) => activateKey(key));
 
 /* ------------------------------------------------------------------ *
+ * SQLite persistence — the renderer's store syncs through these.
+ * ------------------------------------------------------------------ */
+ipcMain.handle("db:load", () => {
+  try {
+    return db.loadState();
+  } catch {
+    return null;
+  }
+});
+ipcMain.handle("db:save", (_event, json) => {
+  db.saveState(json);
+  return true;
+});
+ipcMain.handle("db:clear", () => {
+  db.clearState();
+  return true;
+});
+
+/* ------------------------------------------------------------------ *
  * Backup — real files this time, under the user's Documents folder.
  * ------------------------------------------------------------------ */
 const MAX_BACKUPS = 30;
@@ -278,7 +298,8 @@ ipcMain.handle("pdf:save", async (event, defaultName) => {
   const data = await wc.printToPDF({
     printBackground: true,
     pageSize: "A4",
-    margins: { marginType: "custom", top: 0.4, bottom: 0.4, left: 0.4, right: 0.4 },
+    margins: { marginType: "none" },
+    preferCSSPageSize: true,
   });
   const { canceled, filePath } = await dialog.showSaveDialog(win, {
     title: "Simpan slip gaji sebagai PDF",
@@ -325,6 +346,11 @@ function createWindow() {
       closeDataReceived = true;
       if (jsonString) {
         try {
+          db.saveState(jsonString); // final durable save to SQLite
+        } catch {
+          /* best-effort */
+        }
+        try {
           writeBackupFile(jsonString, "auto-close");
         } catch {
           /* best-effort — never block the app from closing over this */
@@ -355,7 +381,14 @@ function createWindow() {
   });
 }
 
+// Disable GPU compositing — WebView/Chromium GPU acceleration is a common
+// cause of blank/black windows on VMs and remote-desktop sessions (which is
+// where a client running this over TeamViewer/UltraViewer often is). Software
+// rendering is plenty for a data-entry app and avoids that whole class of bug.
+app.disableHardwareAcceleration();
+
 app.whenReady().then(() => {
+  db.init(app.getPath("userData"));
   createWindow();
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

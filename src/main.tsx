@@ -12,6 +12,7 @@ import App from "./App";
 import { applyStoredTheme } from "./lib/theme";
 import { appTitle } from "./config/brand";
 import { inElectron } from "./lib/electron";
+import { snapshotJSON } from "./data/store";
 
 /**
  * A blank white window with no error is the single worst failure mode for a
@@ -57,10 +58,10 @@ try {
   showFatalError(err);
 }
 
-// Flush a final backup right before the window closes.
+// On close, hand the current data to the main process so it can flush a
+// final SQLite save + an auto-backup before the window goes away.
 if (inElectron()) {
   window.electronAPI!.onRequestCloseData(() => {
-    const snapshot = localStorage.getItem("dmtech.payroll.db");
-    window.electronAPI!.sendCloseData(snapshot ?? "");
+    window.electronAPI!.sendCloseData(snapshotJSON());
   });
 }

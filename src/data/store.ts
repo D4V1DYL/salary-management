@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { persist, createJSONStorage, type StateStorage } from "zustand/middleware";
 
 import type {
   BackupEntry,
@@ -14,6 +14,60 @@ import { inElectron } from "@/lib/electron";
 import { seed } from "./mock";
 
 const STORAGE_KEY = "dmtech.payroll.db";
+
+/**
+ * Persistence backend.
+ *  - Desktop app  → real SQLite file (payroll.db) via the Electron main
+ *    process. Writes are debounced and coalesced (last-write-wins) so rapid
+ *    edits don't hammer the DB; the app-close handler flushes a final save.
+ *  - Web preview  → localStorage, so `npm run dev` keeps working.
+ */
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingSave: string | null = null;
+
+function scheduleDbSave(value: string) {
+  pendingSave = value;
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    const v = pendingSave;
+    pendingSave = null;
+    saveTimer = null;
+    if (v != null) window.electronAPI!.dbSave(v).catch(() => {});
+  }, 350);
+}
+
+const dbStorage: StateStorage = {
+  getItem: async (name) => {
+    if (inElectron()) return await window.electronAPI!.dbLoad();
+    try {
+      return localStorage.getItem(name);
+    } catch {
+      return null;
+    }
+  },
+  setItem: (name, value) => {
+    if (inElectron()) {
+      scheduleDbSave(value);
+      return;
+    }
+    try {
+      localStorage.setItem(name, value);
+    } catch {
+      /* ignore */
+    }
+  },
+  removeItem: async (name) => {
+    if (inElectron()) {
+      await window.electronAPI!.dbClear();
+      return;
+    }
+    try {
+      localStorage.removeItem(name);
+    } catch {
+      /* ignore */
+    }
+  },
+};
 
 function nextId(rows: { id: number }[]): number {
   return rows.reduce((m, r) => Math.max(m, r.id), 0) + 1;
@@ -270,7 +324,7 @@ export const usePayroll = create<PayrollState>()(
         // Fire-and-forget: when running as the real desktop app, actually
         // write the file and reconcile this entry with the real path/size.
         if (inElectron()) {
-          const snapshot = localStorage.getItem(STORAGE_KEY);
+          const snapshot = snapshotJSON();
           if (snapshot) {
             window
               .electronAPI!.writeBackup(snapshot, trigger)
@@ -314,14 +368,32 @@ export const usePayroll = create<PayrollState>()(
     {
       name: STORAGE_KEY,
       version: 1,
-      partialize: (s) => ({
-        karyawan: s.karyawan,
-        periode: s.periode,
-        details: s.details,
-        hutang: s.hutang,
-        backups: s.backups,
-        lastBackupAt: s.lastBackupAt,
-      }),
+      storage: createJSONStorage(() => dbStorage),
+      partialize,
     }
   )
 );
+
+function partialize(s: PayrollState) {
+  return {
+    karyawan: s.karyawan,
+    periode: s.periode,
+    details: s.details,
+    hutang: s.hutang,
+    backups: s.backups,
+    lastBackupAt: s.lastBackupAt,
+  };
+}
+
+/** The current store as a persist-shaped JSON string — used for backups and the on-close flush. */
+export function snapshotJSON(): string {
+  return JSON.stringify({ state: partialize(usePayroll.getState()), version: 1 });
+}
+
+// Once hydration finishes, immediately persist the current state to SQLite.
+// On a truly fresh install this writes the seed data so the DB is never empty
+// (even if the app is force-killed before any edit); on a returning install
+// it just re-saves what was loaded (idempotent).
+usePayroll.persist.onFinishHydration(() => {
+  if (inElectron()) window.electronAPI!.dbSave(snapshotJSON()).catch(() => {});
+});
