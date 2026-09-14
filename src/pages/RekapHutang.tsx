@@ -11,7 +11,14 @@ import { EmptyState, SectionLabel } from "@/components/ui/misc";
 import { MeterRow } from "@/components/ui/charts";
 import { toast } from "@/components/ui/toast";
 import { usePayroll } from "@/data/store";
+import { inElectron } from "@/lib/electron";
 import { rupiah } from "@/lib/format";
+
+/** Wrap a CSV field: quote if it contains a comma, quote or newline. */
+function csv(v: string | number): string {
+  const s = String(v);
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
 
 export default function RekapHutang() {
   const { karyawan, hutang } = usePayroll();
@@ -71,9 +78,32 @@ export default function RekapHutang() {
             <Button
               variant="secondary"
               icon={<Download />}
-              onClick={() => toast.info("Ekspor rekap", "Di build Tauri: tombol ini menulis file .xlsx ke folder pilihan.")}
+              disabled={!rows.length}
+              onClick={async () => {
+                const header = ["NIK", "Nama", "Jabatan", "Saldo Awal", "Debit (Kasbon)", "Kredit (Pelunasan)", "Saldo Akhir"];
+                const body = rows.map((r) =>
+                  [r.k.nik, r.k.nama, r.k.jabatan, r.saldoAwal, r.debit, r.kredit, r.saldoAkhir].map(csv).join(",")
+                );
+                const totalRow = ["", "TOTAL", "", tot.saldoAwal, tot.debit, tot.kredit, tot.saldoAkhir].map(csv).join(",");
+                const content = [header.map(csv).join(","), ...body, totalRow].join("\r\n");
+                const fileName = `rekap-hutang-${tahun}.csv`;
+
+                if (inElectron()) {
+                  const saved = await window.electronAPI!.saveTextFile(fileName, content);
+                  if (saved) toast.success("Rekap diekspor", saved.split(/[\\/]/).pop());
+                } else {
+                  // Web preview: trigger a browser download.
+                  const url = URL.createObjectURL(new Blob(["﻿" + content], { type: "text/csv" }));
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = fileName;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                  toast.success("Rekap diekspor", fileName);
+                }
+              }}
             >
-              Export
+              Export CSV
             </Button>
           </div>
         }

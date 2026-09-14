@@ -10,10 +10,32 @@ import { EmptyState } from "@/components/ui/misc";
 import { SlipSheet } from "@/components/slip/SlipSheet";
 import { toast } from "@/components/ui/toast";
 import { usePayroll } from "@/data/store";
+import { inElectron } from "@/lib/electron";
 import { BULAN, labelPeriode, rupiah } from "@/lib/format";
 
-function exportPDF(mode: "one" | "all", label: string) {
+/**
+ * Export slips to PDF. In the desktop app this renders a real PDF file the
+ * user picks a location for (via Electron's printToPDF). In the web preview
+ * it falls back to the browser's print dialog ("Save as PDF").
+ */
+async function exportPDF(mode: "one" | "all", fileName: string, label: string) {
   document.body.dataset.print = mode;
+
+  if (inElectron()) {
+    // Let the print CSS apply, then render to PDF.
+    await new Promise((r) => setTimeout(r, 80));
+    try {
+      const saved = await window.electronAPI!.savePdf(fileName);
+      if (saved) toast.success("PDF tersimpan", saved.split(/[\\/]/).pop());
+    } catch {
+      toast.error("Gagal membuat PDF", "Coba lagi.");
+    } finally {
+      delete document.body.dataset.print;
+    }
+    return;
+  }
+
+  // Web preview fallback.
   const done = () => {
     delete document.body.dataset.print;
     window.removeEventListener("afterprint", done);
@@ -137,7 +159,13 @@ export default function SlipGaji() {
                 variant="secondary"
                 className="w-full"
                 icon={<FileStack />}
-                onClick={() => exportPDF("all", `${list.length} slip ${labelPeriode(bulan, tahun)}`)}
+                onClick={() =>
+                  exportPDF(
+                    "all",
+                    `slip-gaji-${BULAN[bulan - 1]}-${tahun}.pdf`,
+                    `${list.length} slip ${labelPeriode(bulan, tahun)}`
+                  )
+                }
               >
                 Export semua ({list.length}) — 1 PDF
               </Button>
@@ -160,7 +188,14 @@ export default function SlipGaji() {
               <Button
                 icon={<Printer />}
                 disabled={!selected}
-                onClick={() => exportPDF("one", `slip ${selected?.k.nama}`)}
+                onClick={() =>
+                  selected &&
+                  exportPDF(
+                    "one",
+                    `slip-${selected.k.nama.replace(/\s+/g, "-")}-${BULAN[bulan - 1]}-${tahun}.pdf`,
+                    `slip ${selected.k.nama}`
+                  )
+                }
               >
                 Export PDF
               </Button>

@@ -71,6 +71,64 @@ const GROUPS: Group[] = [
 ];
 const FLAT = GROUPS.flatMap((g) => g.cols);
 
+/** Parallel to FLAT: the focusable-column index of each edit cell, or -1 for calc cells. */
+const EDIT_INDEX: number[] = (() => {
+  let e = 0;
+  return FLAT.map((c) => (c.kind === "edit" ? e++ : -1));
+})();
+
+/** Move focus to the editable cell at (row, col) and select its contents. Silently no-ops out of bounds. */
+function focusCell(row: number, col: number) {
+  const el = document.querySelector<HTMLInputElement>(`input[data-r="${row}"][data-c="${col}"]:not([disabled])`);
+  if (el) {
+    el.focus();
+    el.select();
+  }
+}
+
+/** Spreadsheet-style keyboard navigation across the payroll grid. */
+function onCellKeyDown(e: React.KeyboardEvent<HTMLInputElement>, row: number, col: number) {
+  const input = e.currentTarget;
+  const len = input.value.length;
+  const atStart = input.selectionStart === 0 && input.selectionEnd === 0;
+  const atEnd = input.selectionStart === len && input.selectionEnd === len;
+
+  switch (e.key) {
+    case "ArrowUp":
+      e.preventDefault();
+      focusCell(row - 1, col);
+      break;
+    case "ArrowDown":
+      e.preventDefault();
+      focusCell(row + 1, col);
+      break;
+    case "Enter":
+      e.preventDefault();
+      focusCell(e.shiftKey ? row - 1 : row + 1, col);
+      break;
+    case "ArrowLeft":
+      if (atStart) {
+        e.preventDefault();
+        focusCell(row, col - 1);
+      }
+      break;
+    case "ArrowRight":
+      if (atEnd) {
+        e.preventDefault();
+        focusCell(row, col + 1);
+      }
+      break;
+    case "Home":
+      e.preventDefault();
+      focusCell(row, 0);
+      break;
+    case "End":
+      e.preventDefault();
+      focusCell(row, EDIT_INDEX.filter((i) => i >= 0).length - 1);
+      break;
+  }
+}
+
 export default function InputGaji() {
   const { karyawan, periode, getDetails, ensurePeriode, ensureDetails, updateDetail, resetDetailToDefault, finalizePeriode, unlockPeriode, applyHutangToPeriode, createBackup } =
     usePayroll();
@@ -283,7 +341,7 @@ export default function InputGaji() {
                   </tr>
                 </thead>
                 <tbody>
-                  {aktif.map((k) => {
+                  {aktif.map((k, rowIdx) => {
                     const d: PayrollDetail = rowsByKar.get(k.id) ?? emptyDetail(p.id, k.id);
 
                     return (
@@ -310,7 +368,7 @@ export default function InputGaji() {
                           </div>
                         </td>
 
-                        {FLAT.map((c) => {
+                        {FLAT.map((c, flatIdx) => {
                           const val = Number(d[c.key]) || 0;
                           if (c.kind === "calc") {
                             return (
@@ -322,13 +380,18 @@ export default function InputGaji() {
                               </td>
                             );
                           }
+                          const colIdx = EDIT_INDEX[flatIdx];
                           return (
                             <td key={c.key} className="border-b border-r border-border px-0 py-0">
                               <input
                                 disabled={locked}
+                                data-r={rowIdx}
+                                data-c={colIdx}
                                 value={val ? angka(val) : ""}
                                 placeholder="0"
                                 inputMode="numeric"
+                                onFocus={(e) => e.currentTarget.select()}
+                                onKeyDown={(e) => onCellKeyDown(e, rowIdx, colIdx)}
                                 onChange={(e) => updateDetail(p.id, k.id, { [c.key]: parseAngka(e.target.value) })}
                                 className="h-9 w-full bg-transparent px-2.5 text-right tnum text-text outline-none transition-colors placeholder:text-border-strong focus:bg-brand/8 focus:ring-2 focus:ring-inset focus:ring-brand disabled:text-subtle"
                               />
@@ -377,10 +440,20 @@ export default function InputGaji() {
             </div>
           </Card>
 
-          <p className="mt-3 flex items-center gap-1.5 text-[12px] text-subtle">
-            <Info className="size-3.5" />
-            Perubahan tersimpan otomatis ke database terenkripsi. Kolom abu-abu dihitung dari rumus dan tidak bisa diedit.
-          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[12px] text-subtle">
+            <span className="flex items-center gap-1.5">
+              <Info className="size-3.5 shrink-0" />
+              Perubahan tersimpan otomatis. Kolom abu-abu dihitung dari rumus dan tidak bisa diedit.
+            </span>
+            <span className="flex items-center gap-1.5">
+              <kbd className="rounded border border-border bg-surface-2 px-1.5 py-0.5 font-mono text-[10px] text-muted">↑ ↓ ← →</kbd>
+              pindah sel
+              <kbd className="ml-1 rounded border border-border bg-surface-2 px-1.5 py-0.5 font-mono text-[10px] text-muted">Enter</kbd>
+              turun
+              <kbd className="ml-1 rounded border border-border bg-surface-2 px-1.5 py-0.5 font-mono text-[10px] text-muted">Tab</kbd>
+              kanan
+            </span>
+          </div>
         </>
       )}
 
@@ -411,7 +484,7 @@ export default function InputGaji() {
       >
         <ConfirmBody>
           Setelah final, seluruh sel <strong>{labelPeriode(bulan, tahun)}</strong> terkunci dari edit dan
-          sistem membuat backup terenkripsi. Kamu tetap bisa membuka kunci nanti bila perlu koreksi.
+          sistem membuat backup. Kamu tetap bisa membuka kunci nanti bila perlu koreksi.
         </ConfirmBody>
       </Modal>
 

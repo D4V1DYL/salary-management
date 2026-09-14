@@ -10,7 +10,10 @@ import type {
   PayrollPeriode,
 } from "./types";
 import { emptyDetail, hitungPayroll, type PayrollInput } from "@/lib/payroll";
+import { inElectron } from "@/lib/electron";
 import { seed } from "./mock";
+
+const STORAGE_KEY = "dmtech.payroll.db";
 
 function nextId(rows: { id: number }[]): number {
   return rows.reduce((m, r) => Math.max(m, r.id), 0) + 1;
@@ -48,7 +51,6 @@ interface PayrollState {
   details: PayrollDetail[];
   hutang: HutangTransaksi[];
   backups: BackupEntry[];
-  deviceBoundAt: string;
   lastBackupAt: string;
 
   /* ---- karyawan ---- */
@@ -77,7 +79,8 @@ interface PayrollState {
 
   /* ---- backup / misc ---- */
   createBackup: (trigger: BackupEntry["trigger"]) => BackupEntry;
-  rebindDevice: () => void;
+  /** Load a backup file's raw contents back into the store. Returns false if the file is invalid. */
+  importSnapshot: (raw: string) => boolean;
   resetAll: () => void;
 }
 
@@ -87,7 +90,6 @@ const initial = () => ({
   details: seed.details,
   hutang: buildHutangFromSeed(),
   backups: seed.backups,
-  deviceBoundAt: "2026-06-02T02:14:00.000Z",
   lastBackupAt: seed.backups[0]?.createdAt ?? new Date().toISOString(),
 });
 
@@ -261,18 +263,56 @@ export const usePayroll = create<PayrollState>()(
           createdAt: now.toISOString(),
           trigger,
           sizeKb: 380 + Math.round(Math.random() * 80),
-          path: `Documents/PayrollApp/backups/payroll-${stamp}.db.enc`,
+          path: `Documents/PayrollApp/backups/payroll-${stamp}.json`,
         };
         set((s) => ({ backups: [entry, ...s.backups].slice(0, 30), lastBackupAt: entry.createdAt }));
+
+        // Fire-and-forget: when running as the real desktop app, actually
+        // write the file and reconcile this entry with the real path/size.
+        if (inElectron()) {
+          const snapshot = localStorage.getItem(STORAGE_KEY);
+          if (snapshot) {
+            window
+              .electronAPI!.writeBackup(snapshot, trigger)
+              .then((real) => {
+                set((s) => ({
+                  backups: s.backups.map((b) =>
+                    b.id === entry.id ? { ...b, path: real.path, sizeKb: real.sizeKb } : b
+                  ),
+                }));
+              })
+              .catch(() => {
+                /* best-effort — the UI-tracked entry above still stands */
+              });
+          }
+        }
+
         return entry;
       },
 
-      rebindDevice: () => set({ deviceBoundAt: new Date().toISOString() }),
+      importSnapshot: (raw) => {
+        try {
+          const parsed = JSON.parse(raw);
+          const s = parsed?.state ?? parsed;
+          if (!s || !Array.isArray(s.karyawan) || !Array.isArray(s.details)) return false;
+          set({
+            karyawan: s.karyawan,
+            periode: Array.isArray(s.periode) ? s.periode : [],
+            details: s.details,
+            hutang: Array.isArray(s.hutang) ? s.hutang : [],
+            backups: Array.isArray(s.backups) ? s.backups : get().backups,
+            lastBackupAt: s.lastBackupAt ?? new Date().toISOString(),
+          });
+          return true;
+        } catch {
+          return false;
+        }
+      },
 
       resetAll: () => set({ ...initial() }),
     }),
     {
-      name: "dmtech.payroll.db",
+      name: STORAGE_KEY,
       version: 1,
       partialize: (s) => ({
         karyawan: s.karyawan,
@@ -280,7 +320,6 @@ export const usePayroll = create<PayrollState>()(
         details: s.details,
         hutang: s.hutang,
         backups: s.backups,
-        deviceBoundAt: s.deviceBoundAt,
         lastBackupAt: s.lastBackupAt,
       }),
     }

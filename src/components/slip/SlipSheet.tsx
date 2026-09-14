@@ -119,7 +119,7 @@ export function SlipSheet({
 
       <div className="mt-8 flex items-center justify-between border-t border-[#e3e9f1] pt-3 text-[9px] text-[#8695a6]">
         <span className="flex items-center gap-1.5">
-          <LogoMark size={13} /> Dokumen dibuat otomatis oleh <b className="font-semibold text-[#566878]">{appTitle}</b> &middot; snapshot terenkripsi, tanpa formula.
+          <LogoMark size={13} /> Dokumen dibuat otomatis oleh <b className="font-semibold text-[#566878]">{appTitle}</b> &middot; snapshot tanpa formula.
         </span>
         <span className="font-mono">{karyawan.nik}/{periode.bulan}-{periode.tahun}</span>
       </div>

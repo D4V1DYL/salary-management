@@ -182,8 +182,24 @@ fn transfer_license(app: tauri::AppHandle, password: String) -> Result<LicenseSt
     Ok(status_from(fp, Some(marker)))
 }
 
+/// Blank/white WebView2 windows on VMs and some remote-desktop/RDP sessions
+/// are almost always a failed GPU compositor (no real GPU passthrough).
+/// Forcing WebView2's Chromium to render in software fixes it, and costs
+/// nothing on machines with a real GPU — this app has no need for GPU
+/// acceleration anyway.
+#[cfg(windows)]
+fn disable_webview_gpu() {
+    std::env::set_var(
+        "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
+        "--disable-gpu --disable-gpu-compositing",
+    );
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(windows)]
+    disable_webview_gpu();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![

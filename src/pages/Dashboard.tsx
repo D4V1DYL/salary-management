@@ -121,7 +121,7 @@ export default function Dashboard() {
           value={<span className="text-[16px]">{waktuRelatif(lastBackupAt)}</span>}
           icon={<ShieldCheck />}
           accent="pos"
-          sub={`${backups.length} arsip terenkripsi tersimpan`}
+          sub={`${backups.length} arsip cadangan tersimpan`}
         />
       </div>
 
@@ -252,8 +252,8 @@ export default function Dashboard() {
             <div className="flex items-start gap-2.5">
               <span className="mt-0.5 size-1.5 shrink-0 rounded-full bg-pos" />
               <p className="text-muted">
-                Database <span className="font-medium text-text">terenkripsi SQLCipher</span> &amp; terikat
-                ke fingerprint perangkat ini.
+                Aplikasi <span className="font-medium text-text">terkunci ke perangkat</span> ini &amp; datanya
+                tersimpan lokal, tidak pernah meninggalkan komputer.
               </p>
             </div>
             <div className="flex items-start gap-2.5">

@@ -32,3 +32,6 @@ src-tauri/gen/
 *.njsproj
 *.sln
 *.sw?
+
+# Electron build output
+release/

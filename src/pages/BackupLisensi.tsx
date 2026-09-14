@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ShieldCheck,
   DatabaseBackup,
@@ -7,6 +7,10 @@ import {
   Fingerprint,
   TriangleAlert,
   RotateCcw,
+  Clock,
+  Copy,
+  Check,
+  Upload,
 } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -21,7 +25,8 @@ import { LogoMark } from "@/components/brand/Logo";
 import { brand, appTitle } from "@/config/brand";
 import { toast } from "@/components/ui/toast";
 import { usePayroll } from "@/data/store";
-import { fetchLicenseStatus, inTauri, transferLicense, type LicenseStatus } from "@/lib/useLicense";
+import { useLicense } from "@/data/license";
+import { inElectron, isUsable, type BackupFileInfo } from "@/lib/electron";
 import { tanggalPanjang, waktuRelatif } from "@/lib/format";
 
 const TRIGGER_LABEL: Record<string, string> = {
@@ -31,33 +36,65 @@ const TRIGGER_LABEL: Record<string, string> = {
 };
 
 export default function BackupLisensi() {
-  const { backups, lastBackupAt, createBackup, resetAll } = usePayroll();
-  const [status, setStatus] = useState<LicenseStatus | null>(null);
+  const { backups: mockBackups, lastBackupAt, createBackup, importSnapshot, resetAll } = usePayroll();
+  const { status, refresh, activate } = useLicense();
+  const [restoreData, setRestoreData] = useState<{ path: string; content: string } | null>(null);
 
+  const [realBackups, setRealBackups] = useState<BackupFileInfo[] | null>(null);
+  const loadBackups = () => {
+    if (inElectron()) window.electronAPI!.listBackups().then(setRealBackups).catch(() => {});
+  };
   useEffect(() => {
-    fetchLicenseStatus()
-      .then(setStatus)
-      .catch(() => setStatus(null));
+    refresh().catch(() => {});
+    loadBackups();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const licensed = status ? status.matches : true; // optimistic while loading
 
-  const [transferOpen, setTransferOpen] = useState(false);
+  // In the desktop app show the real files on disk; in web preview, the mock list.
+  const backups = useMemo(
+    () =>
+      realBackups
+        ? realBackups.map((b) => ({ id: b.id, createdAt: b.createdAt, trigger: b.trigger, sizeKb: b.sizeKb, path: b.path }))
+        : mockBackups,
+    [realBackups, mockBackups]
+  );
+  const lastBackup = backups[0]?.createdAt ?? lastBackupAt;
+
+  const state = status?.state;
+  const trial = state === "trial";
+  const licensed = state === "full";
+  const needsActivation = status ? !isUsable(status) : false;
+  const deviceCode = status?.fingerprint.short ?? "…";
+
+  const [activateOpen, setActivateOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
-  const [pw, setPw] = useState("");
-  const [pwError, setPwError] = useState("");
-  const [transferring, setTransferring] = useState(false);
+  const [key, setKey] = useState("");
+  const [keyError, setKeyError] = useState("");
+  const [activating, setActivating] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  function copyCode() {
+    navigator.clipboard?.writeText(deviceCode).then(
+      () => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1600);
+      },
+      () => {}
+    );
+  }
 
   return (
     <>
       <PageHeader
         title="Backup & Lisensi"
-        description="Status enkripsi, kunci perangkat, arsip cadangan otomatis, dan transfer lisensi antar komputer."
+        description="Status lisensi, arsip cadangan otomatis, dan transfer lisensi antar komputer."
         actions={
           <Button
             icon={<DatabaseBackup />}
             onClick={() => {
               const e = createBackup("manual");
-              toast.success("Backup manual dibuat", e.path.split("/").pop());
+              toast.success("Backup manual dibuat", e.path.split(/[\\/]/).pop());
+              setTimeout(loadBackups, 300);
             }}
           >
             Backup sekarang
@@ -66,35 +103,101 @@ export default function BackupLisensi() {
       />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {/* Device lock */}
+        {/* License / device lock */}
         <Card>
           <CardHeader
-            title="Kunci perangkat"
-            subtitle="Lisensi aplikasi untuk komputer ini"
+            title="Lisensi"
+            subtitle="Status lisensi aplikasi untuk komputer ini"
             icon={<Fingerprint />}
             actions={
-              <Badge tone={licensed ? "pos" : "neg"} dot>
-                {licensed ? "Aktif" : "Perlu aktivasi"}
+              <Badge tone={licensed ? "pos" : trial ? "warn" : "neg"} dot>
+                {licensed ? "Lisensi Penuh" : trial ? "Trial" : "Perlu aktivasi"}
               </Badge>
             }
           />
           <CardBody>
             <div className="flex items-center gap-3 rounded-lg border border-border bg-surface-2/50 p-4">
-              <span className="grid size-10 shrink-0 place-items-center rounded-full bg-pos-soft text-pos">
-                <ShieldCheck className="size-5" />
+              <span
+                className={
+                  "grid size-10 shrink-0 place-items-center rounded-full " +
+                  (licensed ? "bg-pos-soft text-pos" : trial ? "bg-warn-soft text-warn" : "bg-neg-soft text-neg")
+                }
+              >
+                {licensed ? <ShieldCheck className="size-5" /> : trial ? <Clock className="size-5" /> : <TriangleAlert className="size-5" />}
               </span>
               <div className="min-w-0">
                 <p className="text-[13.5px] font-semibold text-text">
-                  {licensed ? "Lisensi aktif untuk perangkat ini" : "Lisensi belum aktif di perangkat ini"}
+                  {licensed
+                    ? "Lisensi penuh aktif"
+                    : trial
+                      ? `Mode trial — ${status?.daysLeft} hari tersisa`
+                      : state === "trial-expired"
+                        ? "Masa trial berakhir"
+                        : "Lisensi tidak aktif di perangkat ini"}
                 </p>
                 <p className="text-[12px] text-subtle">
-                  {status?.boundAt ? `Terverifikasi sejak ${tanggalPanjang(status.boundAt)}` : "Memuat status…"}
+                  {licensed && status?.activatedAt
+                    ? `Diaktifkan ${tanggalPanjang(status.activatedAt)}`
+                    : trial
+                      ? `dari total ${status?.trialDays} hari masa trial`
+                      : "masukkan kode aktivasi untuk melanjutkan"}
                 </p>
               </div>
             </div>
+
+            {trial && (
+              <div className="mt-3">
+                <div className="mb-1.5 flex items-center justify-between text-[12px]">
+                  <span className="font-medium text-muted">Sisa masa trial</span>
+                  <span className="tnum font-semibold text-warn">
+                    {status?.daysLeft} / {status?.trialDays} hari
+                  </span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-surface-2">
+                  <div
+                    className="h-full rounded-full bg-warn transition-[width] duration-500"
+                    style={{ width: `${((status?.daysLeft ?? 0) / (status?.trialDays || 1)) * 100}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Device code + activation */}
+            {(trial || needsActivation) && (
+              <>
+                <div className="mt-3 rounded-lg border border-border bg-surface-2/50 p-3">
+                  <div className="mb-1 flex items-center justify-between">
+                    <p className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-subtle">
+                      Kode Perangkat
+                    </p>
+                    <button
+                      onClick={copyCode}
+                      className="flex items-center gap-1 text-[10.5px] font-medium text-muted transition-colors hover:text-text"
+                    >
+                      {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
+                      {copied ? "Tersalin" : "Salin"}
+                    </button>
+                  </div>
+                  <p className="break-all font-mono text-[12px] leading-relaxed text-brand">{deviceCode}</p>
+                </div>
+                <Button
+                  className="mt-3 w-full"
+                  icon={<KeyRound />}
+                  onClick={() => {
+                    setKey("");
+                    setKeyError("");
+                    setActivateOpen(true);
+                  }}
+                >
+                  {needsActivation ? "Aktifkan Lisensi" : "Aktifkan Lisensi Penuh"}
+                </Button>
+              </>
+            )}
+
             <p className="mt-3 rounded-lg bg-info-soft px-3 py-2 text-[12px] leading-relaxed text-info">
-              Aplikasi ini hanya berjalan di perangkat yang terdaftar untuk lisensi ini. Kalau kamu
-              mengganti atau meng-upgrade komputer, hubungi admin untuk proses Transfer Lisensi.
+              Aplikasi ini hanya berjalan di komputer yang lisensinya diaktifkan. Kalau kamu mengganti
+              atau meng-upgrade komputer, kirim <span className="font-medium">Kode Perangkat</span> di atas ke{" "}
+              {brand.vendor.name} untuk mendapat kode aktivasi baru (transfer lisensi).
             </p>
           </CardBody>
         </Card>
@@ -106,21 +209,44 @@ export default function BackupLisensi() {
             subtitle="Retensi 30 arsip terakhir"
             icon={<ShieldCheck />}
             actions={
-              <Button
-                variant="ghost"
-                size="sm"
-                icon={<FolderOpen />}
-                onClick={() => toast.info("Buka folder", "Documents/PayrollApp/backups/ — di build Tauri folder ini terbuka di Explorer.")}
-              >
-                Folder
-              </Button>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={<Upload />}
+                  onClick={async () => {
+                    if (!inElectron()) {
+                      toast.info("Pulihkan", "Fitur pulihkan hanya tersedia di aplikasi desktop.");
+                      return;
+                    }
+                    const picked = await window.electronAPI!.pickRestoreBackup();
+                    if (picked) setRestoreData(picked);
+                  }}
+                >
+                  Pulihkan
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={<FolderOpen />}
+                  onClick={() => {
+                    if (inElectron()) {
+                      window.electronAPI!.openBackupFolder();
+                    } else {
+                      toast.info("Buka folder", "Documents/PayrollApp/backups/ — cuma bisa dibuka dari aplikasi desktop.");
+                    }
+                  }}
+                >
+                  Folder
+                </Button>
+              </div>
             }
           />
           <CardBody>
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-lg border border-border bg-surface-2/50 p-3">
                 <p className="text-[11.5px] text-subtle">Backup terakhir</p>
-                <p className="mt-0.5 text-[14px] font-semibold text-text">{waktuRelatif(lastBackupAt)}</p>
+                <p className="mt-0.5 text-[14px] font-semibold text-text">{waktuRelatif(lastBackup)}</p>
               </div>
               <div className="rounded-lg border border-border bg-surface-2/50 p-3">
                 <p className="text-[11.5px] text-subtle">Arsip tersimpan</p>
@@ -156,23 +282,35 @@ export default function BackupLisensi() {
           </CardBody>
         </Card>
 
-        {/* Transfer lisensi */}
+        {/* Aktivasi / Transfer lisensi */}
         <Card>
-          <CardHeader title="Transfer Lisensi" subtitle="Khusus admin — pindahkan data ke komputer baru" icon={<KeyRound />} />
+          <CardHeader title="Aktivasi & Transfer Lisensi" subtitle="Aktifkan lisensi penuh atau pindah ke komputer baru" icon={<KeyRound />} />
           <CardBody className="space-y-3">
-            <p className="text-[12.5px] leading-relaxed text-muted">
-              Mengaktifkan ulang lisensi aplikasi untuk komputer ini. Dipakai saat PC diganti atau
-              di-upgrade supaya data tidak hilang. Butuh password khusus admin.
-            </p>
+            <ol className="space-y-2 text-[12.5px] leading-relaxed text-muted">
+              <li className="flex gap-2">
+                <span className="grid size-5 shrink-0 place-items-center rounded-full bg-surface-2 text-[11px] font-semibold text-muted">1</span>
+                Salin <span className="font-medium text-text">Kode Perangkat</span> di kartu Lisensi.
+              </li>
+              <li className="flex gap-2">
+                <span className="grid size-5 shrink-0 place-items-center rounded-full bg-surface-2 text-[11px] font-semibold text-muted">2</span>
+                Kirim kode itu ke {brand.vendor.name} untuk mendapat kode aktivasi.
+              </li>
+              <li className="flex gap-2">
+                <span className="grid size-5 shrink-0 place-items-center rounded-full bg-surface-2 text-[11px] font-semibold text-muted">3</span>
+                Masukkan kode aktivasi di sini. Kode hanya berlaku untuk komputer ini.
+              </li>
+            </ol>
             <Button
-              variant="secondary"
+              variant={licensed ? "secondary" : "primary"}
+              className="w-full"
               icon={<KeyRound />}
               onClick={() => {
-                setPw("");
-                setTransferOpen(true);
+                setKey("");
+                setKeyError("");
+                setActivateOpen(true);
               }}
             >
-              Mulai transfer lisensi
+              {licensed ? "Masukkan kode aktivasi" : "Aktifkan lisensi penuh"}
             </Button>
           </CardBody>
         </Card>
@@ -184,10 +322,10 @@ export default function BackupLisensi() {
             <dl className="divide-y divide-border">
               <KeyValue label="Produk">{`${appTitle} — ${brand.vendor.product}`}</KeyValue>
               <KeyValue label="Versi" mono>
-                {brand.vendor.version} {inTauri() ? "· desktop" : "· web preview"}
+                {brand.vendor.version} {inElectron() ? "· desktop" : "· web preview"}
               </KeyValue>
               <KeyValue label="Target">Aplikasi desktop offline</KeyValue>
-              <KeyValue label="Lisensi">{`Internal — ${brand.company.name}`}</KeyValue>
+              <KeyValue label="Lisensi">{licensed ? "Penuh" : trial ? `Trial (${status?.daysLeft} hari lagi)` : "Belum aktif"}</KeyValue>
               <KeyValue label="Pengembang">{brand.vendor.name}</KeyValue>
             </dl>
 
@@ -210,51 +348,67 @@ export default function BackupLisensi() {
       </p>
 
       <Modal
-        open={transferOpen}
-        onClose={() => setTransferOpen(false)}
-        title="Transfer Lisensi"
-        description="Masukkan password transfer admin untuk mengikat ulang database ke perangkat ini."
+        open={activateOpen}
+        onClose={() => setActivateOpen(false)}
+        title="Aktivasi Lisensi"
+        description="Masukkan kode aktivasi yang diberikan untuk komputer ini."
         size="sm"
         footer={
           <>
-            <Button variant="secondary" onClick={() => setTransferOpen(false)}>
+            <Button variant="secondary" onClick={() => setActivateOpen(false)}>
               Batal
             </Button>
             <Button
-              loading={transferring}
+              loading={activating}
               onClick={async () => {
-                setPwError("");
-                setTransferring(true);
+                setKeyError("");
+                setActivating(true);
                 try {
-                  const next = await transferLicense(pw);
-                  setStatus(next);
-                  createBackup("transfer-lisensi");
-                  toast.success("Lisensi diaktifkan", "Aplikasi sekarang aktif untuk perangkat ini.");
-                  setTransferOpen(false);
-                  setPw("");
+                  const next = await activate(key);
+                  if (isUsable(next) && next.state === "full") {
+                    createBackup("transfer-lisensi");
+                    toast.success("Lisensi diaktifkan", "Aplikasi sekarang berlisensi penuh untuk perangkat ini.");
+                    setActivateOpen(false);
+                    setKey("");
+                  } else {
+                    setKeyError("Kode aktivasi tidak valid untuk perangkat ini.");
+                  }
                 } catch (e) {
-                  setPwError(e instanceof Error ? e.message : "Password transfer salah.");
+                  setKeyError(e instanceof Error ? e.message : "Kode aktivasi tidak valid.");
                 } finally {
-                  setTransferring(false);
+                  setActivating(false);
                 }
               }}
             >
-              Transfer
+              Aktifkan
             </Button>
           </>
         }
       >
+        <div className="mb-3 rounded-lg border border-border bg-surface-2/50 p-3">
+          <div className="mb-1 flex items-center justify-between">
+            <p className="text-[10.5px] font-semibold uppercase tracking-[0.08em] text-subtle">Kode Perangkat</p>
+            <button
+              onClick={copyCode}
+              className="flex items-center gap-1 text-[10.5px] font-medium text-muted transition-colors hover:text-text"
+            >
+              {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
+              {copied ? "Tersalin" : "Salin"}
+            </button>
+          </div>
+          <p className="break-all font-mono text-[12px] leading-relaxed text-brand">{deviceCode}</p>
+        </div>
         <TextField
-          label="Password transfer"
-          type="password"
-          value={pw}
-          onChange={(e) => setPw(e.target.value)}
-          placeholder="••••••••"
+          label="Kode aktivasi"
+          value={key}
+          onChange={(e) => setKey(e.target.value)}
+          placeholder="XXXX-XXXX-XXXX-XXXX"
           addonRight={<KeyRound />}
-          error={pwError}
+          error={keyError}
+          className="font-mono uppercase tracking-wider"
         />
         <p className="mt-3 text-[12px] leading-relaxed text-muted">
-          Hubungi admin kalau kamu tidak tahu password ini.
+          Kirim Kode Perangkat di atas ke {brand.vendor.name} untuk mendapatkan kode aktivasi.
         </p>
       </Modal>
 
@@ -282,8 +436,43 @@ export default function BackupLisensi() {
         }
       >
         <ConfirmBody>
-          Tindakan ini menghapus semua perubahanmu di preview ini dan memuat ulang data contoh. Tidak bisa
-          dibatalkan.
+          Tindakan ini menghapus seluruh data saat ini dan memuat ulang data contoh awal. Tidak bisa
+          dibatalkan — pastikan kamu sudah punya backup bila datanya penting.
+        </ConfirmBody>
+      </Modal>
+
+      <Modal
+        open={restoreData != null}
+        onClose={() => setRestoreData(null)}
+        title="Pulihkan dari backup?"
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setRestoreData(null)}>
+              Batal
+            </Button>
+            <Button
+              onClick={() => {
+                if (!restoreData) return;
+                const ok = importSnapshot(restoreData.content);
+                if (ok) {
+                  toast.success("Data dipulihkan", restoreData.path.split(/[\\/]/).pop());
+                  loadBackups();
+                } else {
+                  toast.error("Gagal memulihkan", "File backup tidak valid atau rusak.");
+                }
+                setRestoreData(null);
+              }}
+            >
+              Ya, pulihkan
+            </Button>
+          </>
+        }
+      >
+        <ConfirmBody>
+          Seluruh data saat ini akan <strong>diganti</strong> dengan isi file backup
+          {restoreData ? ` "${restoreData.path.split(/[\\/]/).pop()}"` : ""}. Sebaiknya buat backup dulu
+          sebelum memulihkan.
         </ConfirmBody>
       </Modal>
     </>

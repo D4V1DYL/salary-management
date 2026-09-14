@@ -8,6 +8,11 @@ const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
 export default defineConfig(() => ({
+  // Relative asset paths — required so the built app loads correctly under
+  // Electron's file:// protocol (absolute "/assets/…" paths resolve to the
+  // filesystem root there, not the dist folder).
+  base: "./",
+
   plugins: [react(), tailwindcss()],
 
   resolve: {
