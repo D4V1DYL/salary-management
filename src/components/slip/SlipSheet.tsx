@@ -43,7 +43,7 @@ export function SlipSheet({
 
   return (
     <div
-      className={`slip-page mx-auto w-[210mm] max-w-full bg-white p-[14mm] font-sans text-[#0f2438] shadow-[0_1px_2px_rgba(9,23,37,0.08),0_10px_40px_-12px_rgba(9,23,37,0.18)] ${className}`}
+      className={`slip-page mx-auto flex w-[210mm] min-h-[289mm] max-w-full flex-col bg-white p-[16mm] font-sans text-[#0f2438] shadow-[0_1px_2px_rgba(9,23,37,0.08),0_10px_40px_-12px_rgba(9,23,37,0.18)] ${className}`}
       style={{ colorScheme: "light" }}
     >
       {/* header */}
@@ -111,13 +111,13 @@ export function SlipSheet({
         <p className="tnum text-[20px] font-bold">{rupiah(detail.gajiTransfer)}</p>
       </div>
 
-      {/* signatures */}
-      <div className="mt-8 grid grid-cols-2 gap-8 text-[11px]">
+      {/* signatures — pushed toward the bottom so the slip fills the A4 page */}
+      <div className="mt-auto grid grid-cols-2 gap-8 pt-16 text-[11px]">
         <Sign role="Dibuat oleh" name="Bag. Keuangan" />
         <Sign role="Diterima oleh" name={karyawan.namaPenerima || karyawan.nama} />
       </div>
 
-      <div className="mt-8 flex items-center justify-between border-t border-[#e3e9f1] pt-3 text-[9px] text-[#8695a6]">
+      <div className="mt-10 flex items-center justify-between border-t border-[#e3e9f1] pt-3 text-[9px] text-[#8695a6]">
         <span className="flex items-center gap-1.5">
           <LogoMark size={13} /> Dokumen dibuat otomatis oleh <b className="font-semibold text-[#566878]">{appTitle}</b> &middot; snapshot tanpa formula.
         </span>
